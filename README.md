@@ -1,7 +1,7 @@
 # USB2VFD - Linux Driver for AIDA64 VFD Displays
 
 Control cheap Chinese USB VFD (Vacuum Fluorescent Display) clones from Linux.
-Mine was probably a "Kissbuyer 
+Mine was branded "Kissbuyer" on AliExpress with markings of "AIDA64-USB2VFD".
 
 ## Credits
 
