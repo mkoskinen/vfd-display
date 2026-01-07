@@ -120,7 +120,7 @@ while True:
 
 ### Daemon (`vfd-daemon.py`)
 
-A background daemon with multiple display modes:
+A background daemon with rotating screens and UDP input:
 
 ```bash
 # Run with default screens (rotates every 30s):
@@ -134,40 +134,71 @@ A background daemon with multiple display modes:
 # Static text, centered
 ./vfd-daemon.py "Line 1" "Line 2" -c
 
-# Custom port
+# Custom serial port
 ./vfd-daemon.py -p /dev/ttyUSB0
+
+# Listen on LAN (default: localhost only)
+./vfd-daemon.py -L
+
+# UDP-only mode (blank until UDP received)
+./vfd-daemon.py -u
+
+# Custom freshness (seconds, 0 = infinite)
+./vfd-daemon.py -f 300
 ```
 
-#### File-based Display
+#### UDP Input
 
-Write to `/tmp/vfd.txt` to override the default screens:
+Send text via UDP to add it to the screen rotation:
+
 ```bash
-echo -e "Alert!\nServer down" > /tmp/vfd.txt
+# Local
+echo -e "Hello\nWorld" | nc -u localhost 5566
+
+# From another machine (requires -L flag)
+echo -e "Alert\nServer down" | nc -u 192.168.1.50 5566
 ```
-File content is used if it exists and is less than 60 seconds old.
+
+- New UDP messages immediately interrupt rotation and display for 30s
+- Content then joins the rotation for 12 hours (configurable with `-f`)
+- Auto-centers unless you add leading/trailing spaces for manual positioning:
+
+```bash
+# Auto-centered
+echo -e "ALERT\nServer down" | nc -u localhost 5566
+
+# Left-aligned (leading space)
+echo -e " ALERT\n Server down" | nc -u localhost 5566
+```
 
 #### Adding Custom Screens
 
 Edit the `SCREENS` list in `vfd-daemon.py`:
+
 ```python
 SCREEN_INTERVAL = 30  # seconds between screen changes
 
 def screen_clock_stats():
-    """Screen 1: Clock and system stats"""
+    """Clock and system stats"""
     line1 = time.strftime('%H:%M:%S %d/%m')
     line2 = f"L:{get_load()} {get_cpu_temp()}"
     return (line1, line2)
 
 def screen_host_ip():
-    """Screen 2: Hostname and external IP"""
+    """Hostname and external IP"""
     line1 = socket.gethostname()[:15]
     line2 = get_external_ip()
     return (line1, line2)
 
-# Add/remove/reorder screens here:
+def screen_udp():
+    """UDP content (skipped if no fresh data)"""
+    # ... returns None if no data
+
+# Add/remove/reorder screens here (return None to skip):
 SCREENS = [
     screen_clock_stats,
     screen_host_ip,
+    screen_udp,
 ]
 ```
 
