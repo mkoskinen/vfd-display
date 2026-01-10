@@ -3,9 +3,12 @@
 Control cheap Chinese USB VFD (Vacuum Fluorescent Display) clones from Linux.
 Mine was branded "Kissbuyer" on AliExpress with markings of "AIDA64-USB2VFD".
 
+![VFD Display showing hostname and IP](assets/vfd-display.jpg)
+![VFD PCB back with AIDA64-USB2VFD marking](assets/vfd-pcb.jpg)
+
 ## Credits
 
-Protocol reverse-engineered thanks to this excellent video by **Volos Projects**:
+Protocol reverse-engineered thanks to this excellent video by **upir**:
 - YouTube: [VFD Display Testing](https://www.youtube.com/watch?v=g7SOxzKatCc)
 - The video documents sniffing AIDA64's serial communication to understand the protocol
 
@@ -261,5 +264,5 @@ MIT - Do whatever you want with this.
 ## See Also
 
 - [Matrix Orbital LK Protocol](https://www.matrixorbital.com/manuals/LK_series_pdf.pdf) (reference, not fully compatible)
-- [Volos Projects YouTube](https://www.youtube.com/@VolosProjects) - Original reverse engineering
+- [upir's VFD video](https://www.youtube.com/watch?v=g7SOxzKatCc) - Original reverse engineering
 - [AIDA64 LCD Support](https://www.aida64.com/products/features/external-display-support)
