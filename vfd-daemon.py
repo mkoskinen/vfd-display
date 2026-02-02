@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """VFD Daemon - rotating screens with optional UDP input"""
 import serial
+import serial.tools.list_ports
 import time
 import socket
 import argparse
@@ -8,6 +9,15 @@ import subprocess
 import threading
 
 SERIAL_PORT = '/dev/ttyUSB1'
+
+CH340_VID_PID = (0x1a86, 0x7523)
+
+def find_vfd_port():
+    """Auto-detect CH340-based VFD display serial port."""
+    for port in serial.tools.list_ports.comports():
+        if (port.vid, port.pid) == CH340_VID_PID:
+            return port.device
+    return None
 UDP_PORT = 5566
 
 # =============================================================================
@@ -148,7 +158,7 @@ def main():
     parser = argparse.ArgumentParser(description='VFD Display Daemon')
     parser.add_argument('line1', nargs='?', default=None, help='Line 1 text (static mode)')
     parser.add_argument('line2', nargs='?', default='', help='Line 2 text (static mode)')
-    parser.add_argument('-p', '--port', default=SERIAL_PORT, help='Serial port')
+    parser.add_argument('-p', '--port', default=None, help='Serial port (auto-detects CH340 if omitted)')
     parser.add_argument('-c', '--center', action='store_true', help='Center text (static mode)')
     parser.add_argument('-L', '--lan', action='store_true', help='Listen on all interfaces (0.0.0.0)')
     parser.add_argument('-u', '--udp-only', action='store_true', help='Only show UDP content (blank until received)')
@@ -170,7 +180,16 @@ def main():
     if args.line1 is not None:
         static_content = (args.line1[:15], args.line2[:15])
 
-    ser = serial.Serial(args.port, 9600, timeout=1)
+    port = args.port
+    if port is None:
+        port = find_vfd_port()
+        if port is None:
+            print("No CH340 VFD display found. Is it plugged in?")
+            print("Use -p to specify the port manually.")
+            return
+        print(f"Auto-detected VFD on {port}")
+
+    ser = serial.Serial(port, 9600, timeout=1)
 
     def fmt(text, force_center=None):
         """Format text for display, pad to 20 chars.
@@ -202,7 +221,7 @@ def main():
             time.sleep(5)
             try:
                 ser.close()
-                ser = serial.Serial(args.port, 9600, timeout=1)
+                ser = serial.Serial(port, 9600, timeout=1)
             except Exception:
                 pass
 
