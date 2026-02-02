@@ -218,12 +218,23 @@ def main():
             time.sleep(0.5)
         except Exception as e:
             print(f"Error: {e}")
-            time.sleep(5)
             try:
                 ser.close()
-                ser = serial.Serial(port, 9600, timeout=1)
             except Exception:
                 pass
+            while True:
+                time.sleep(5)
+                report = args.port or find_vfd_port()
+                if report is None:
+                    print("Waiting for VFD to reappear...")
+                    continue
+                try:
+                    ser = serial.Serial(report, 9600, timeout=1)
+                    port = report
+                    print(f"Reconnected on {port}")
+                    break
+                except Exception:
+                    continue
 
 if __name__ == "__main__":
     main()
