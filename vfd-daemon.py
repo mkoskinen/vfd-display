@@ -184,10 +184,12 @@ def main():
     if port is None:
         port = find_vfd_port()
         if port is None:
-            print("No CH340 VFD display found. Is it plugged in?")
-            print("Use -p to specify the port manually.")
-            return
-        print(f"Auto-detected VFD on {port}")
+            print("No CH340 VFD display found, waiting for it to appear...", flush=True)
+            print("(Use -p to specify the port manually.)", flush=True)
+        while port is None:
+            time.sleep(5)
+            port = find_vfd_port()
+        print(f"Auto-detected VFD on {port}", flush=True)
 
     ser = serial.Serial(port, 9600, timeout=1)
 
