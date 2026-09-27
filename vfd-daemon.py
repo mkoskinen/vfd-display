@@ -5,10 +5,11 @@ import serial.tools.list_ports
 import time
 import socket
 import argparse
+import glob
+import ipaddress
 import subprocess
+import sys
 import threading
-
-SERIAL_PORT = '/dev/ttyUSB1'
 
 CH340_VID_PID = (0x1a86, 0x7523)
 
@@ -63,9 +64,12 @@ _udp_content = {'lines': None, 'time': 0, 'show_until': 0}
 # Runtime config (set from args in main)
 _config = {'freshness': DEFAULT_FRESHNESS, 'udp_only': False}
 
-# Cache for external IP
-_ip_cache = {'ip': None, 'time': 0}
-IP_CACHE_TTL = 20  # seconds
+# External IP, refreshed by a background thread so the display loop never blocks
+_ip_cache = {'ip': None}
+IP_REFRESH_INTERVAL = 300  # seconds
+
+# CPU temperature sensor path (resolved on first use)
+_temp_path = {'path': None}
 
 def sanitize_udp(data):
     """Sanitize UDP payload: decode, strip control chars, split lines"""
@@ -100,26 +104,46 @@ def udp_listener(bind_addr):
         except Exception as e:
             print(f"UDP error: {e}")
 
-def get_external_ip():
-    """Fetch external IP with caching"""
-    now = time.time()
-    if _ip_cache['ip'] and (now - _ip_cache['time']) < IP_CACHE_TTL:
-        return _ip_cache['ip']
+def fetch_external_ip():
+    """Look up external IP, returns None on failure or non-IP response"""
     try:
         result = subprocess.run(
             ['curl', '-s', '--max-time', '5', 'ifconfig.me'],
             capture_output=True, text=True
         )
-        ip = result.stdout.strip()[:15] if result.returncode == 0 else '?.?.?.?'
+        if result.returncode != 0:
+            return None
+        ip = result.stdout.strip()
+        ipaddress.ip_address(ip)  # reject HTML error pages etc.
+        return ip[:15]
     except Exception:
-        ip = '?.?.?.?'
-    _ip_cache['ip'] = ip
-    _ip_cache['time'] = now
-    return ip
+        return None
+
+def ip_refresher():
+    """Background thread: refresh external IP periodically"""
+    while True:
+        _ip_cache['ip'] = fetch_external_ip()
+        time.sleep(IP_REFRESH_INTERVAL)
+
+def get_external_ip():
+    return _ip_cache['ip'] or '?.?.?.?'
+
+def find_cpu_temp_path():
+    """Prefer the CPU package sensor, fall back to thermal_zone0"""
+    for zone in sorted(glob.glob('/sys/class/thermal/thermal_zone*')):
+        try:
+            with open(f'{zone}/type') as f:
+                if f.read().strip() in ('x86_pkg_temp', 'k10temp', 'cpu-thermal'):
+                    return f'{zone}/temp'
+        except Exception:
+            continue
+    return '/sys/class/thermal/thermal_zone0/temp'
 
 def get_cpu_temp():
+    if _temp_path['path'] is None:
+        _temp_path['path'] = find_cpu_temp_path()
     try:
-        with open('/sys/class/thermal/thermal_zone0/temp') as f:
+        with open(_temp_path['path']) as f:
             return f"{int(f.read()) // 1000}C"
     except Exception:
         return "??C"
@@ -166,6 +190,9 @@ def main():
                         help='UDP content freshness in seconds (0 = infinite, default: 43200)')
     args = parser.parse_args()
 
+    # Flush output immediately (stdout is a pipe under cron/systemd)
+    sys.stdout.reconfigure(line_buffering=True)
+
     # Set runtime config
     _config['freshness'] = args.freshness
     _config['udp_only'] = args.udp_only
@@ -174,6 +201,7 @@ def main():
     bind_addr = '0.0.0.0' if args.lan else '127.0.0.1'
     udp_thread = threading.Thread(target=udp_listener, args=(bind_addr,), daemon=True)
     udp_thread.start()
+    threading.Thread(target=ip_refresher, daemon=True).start()
 
     # Static mode: command line args provided
     static_content = None
@@ -184,12 +212,12 @@ def main():
     if port is None:
         port = find_vfd_port()
         if port is None:
-            print("No CH340 VFD display found, waiting for it to appear...", flush=True)
-            print("(Use -p to specify the port manually.)", flush=True)
+            print("No CH340 VFD display found, waiting for it to appear...")
+            print("(Use -p to specify the port manually.)")
         while port is None:
             time.sleep(5)
             port = find_vfd_port()
-        print(f"Auto-detected VFD on {port}", flush=True)
+        print(f"Auto-detected VFD on {port}")
 
     ser = serial.Serial(port, 9600, timeout=1)
 
@@ -214,8 +242,9 @@ def main():
                 force_center = None  # auto-detect
 
             ser.write(bytes([0xFE, 0x48]))
-            ser.write(fmt(line1, force_center).encode())
-            ser.write(fmt(line2, force_center).encode())
+            # ASCII only: multi-byte UTF-8 would shift line 2 off its offset
+            ser.write(fmt(line1, force_center).encode('ascii', 'replace'))
+            ser.write(fmt(line2, force_center).encode('ascii', 'replace'))
             ser.flush()
             time.sleep(0.5)
         except Exception as e:

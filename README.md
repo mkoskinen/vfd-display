@@ -1,6 +1,8 @@
-# USB2VFD - Linux Driver for AIDA64 VFD Displays
+# vfd-display - Linux VFD Display Driver for USB2VFD / AIDA64 VFD Displays
 
-Control cheap Chinese USB VFD (Vacuum Fluorescent Display) clones from Linux.
+Control cheap Chinese USB VFD displays (Vacuum Fluorescent Display) from Linux
+with Python: a command line tool and a daemon that shows a clock, system stats,
+IP address, or any text you send it over UDP.
 Mine was branded "Kissbuyer" on AliExpress with markings of "AIDA64-USB2VFD".
 
 ![VFD Display showing hostname and IP](assets/vfd-display.jpg)
@@ -36,7 +38,7 @@ lsusb | grep CH340
 # Bus 001 Device 002: ID 1a86:7523 QinHeng Electronics CH340 serial converter
 
 ls /dev/ttyUSB*
-# /dev/ttyUSB0 or /dev/ttyUSB1
+# /dev/ttyUSB0, /dev/ttyUSB1, ... (vfd.py and vfd-daemon.py auto-detect the CH340)
 ```
 
 ## Protocol
@@ -94,7 +96,7 @@ sudo usermod -a -G dialout $USER
 import serial
 import time
 
-ser = serial.Serial('/dev/ttyUSB1', 9600, timeout=1)
+ser = serial.Serial('/dev/ttyUSB0', 9600, timeout=1)  # adjust to your port
 
 def vfd_write(line1="", line2=""):
     ser.write(bytes([0xFE, 0x48]))
@@ -119,6 +121,9 @@ while True:
 
 # Show hostname and time
 ./vfd.py "$(hostname)" "$(date +%H:%M)" -k
+
+# Custom serial port (auto-detects CH340 if omitted)
+./vfd.py "Hello" "World" -p /dev/ttyUSB0
 ```
 
 ### Daemon (`vfd-daemon.py`)
@@ -137,7 +142,7 @@ A background daemon with rotating screens and UDP input:
 # Static text, centered
 ./vfd-daemon.py "Line 1" "Line 2" -c
 
-# Custom serial port
+# Custom serial port (auto-detects CH340 if omitted; waits if not plugged in yet)
 ./vfd-daemon.py -p /dev/ttyUSB0
 
 # Listen on LAN (default: localhost only)
@@ -209,7 +214,7 @@ SCREENS = [
 ```bash
 python3 -c "
 import serial, time
-ser = serial.Serial('/dev/ttyUSB1', 9600)
+ser = serial.Serial('/dev/ttyUSB0', 9600)
 while True:
     ser.write(bytes([0xFE, 0x48]))
     ser.write(time.strftime('%H:%M:%S').center(15).ljust(20).encode())
